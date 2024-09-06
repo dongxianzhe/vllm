@@ -93,7 +93,7 @@ def _detect_cloud_provider() -> str:
     return "UNKNOWN"
 
 
-class UsageContext(str, Enum):
+class UsageContext(str, Enum): # 继承自str和Enum的作用是什么?
     UNKNOWN_CONTEXT = "UNKNOWN_CONTEXT"
     LLM_CLASS = "LLM_CLASS"
     API_SERVER = "API_SERVER"

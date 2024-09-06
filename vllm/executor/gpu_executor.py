@@ -11,6 +11,8 @@ from vllm.utils import (get_distributed_init_method, get_ip, get_open_port,
 from vllm.worker.worker_base import WorkerBase, WorkerWrapperBase
 
 logger = init_logger(__name__)
+from vllm.clogger import init_clogger
+clogger = init_clogger()
 
 
 def create_worker(worker_module_name: str, worker_class_name: str,
@@ -26,7 +28,7 @@ def create_worker(worker_module_name: str, worker_class_name: str,
 
 
 class GPUExecutor(ExecutorBase):
-
+    # init的方法在父类中，会调用_init_executor方法
     uses_ray: bool = False
 
     def _init_executor(self) -> None:
@@ -90,6 +92,7 @@ class GPUExecutor(ExecutorBase):
 
         (worker_module_name, worker_class_name,
          worker_class_fn) = self._get_worker_module_and_class()
+        clogger.debug(f'worker_module_name, worker_class_name, worker_class_fn: {worker_module_name} {worker_class_name} {worker_class_fn}')
         worker_kwargs.update(
             worker_module_name=worker_module_name,
             worker_class_name=worker_class_name,

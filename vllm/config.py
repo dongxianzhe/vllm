@@ -958,7 +958,7 @@ class SchedulerConfig:
                  num_scheduler_steps: int = 1,
                  send_delta_data: bool = False) -> None:
         if max_num_batched_tokens is None:
-            if enable_chunked_prefill:
+            if enable_chunked_prefill: # 这里或许可以改成动态调度 ? 
                 # It is the values that have the best balance between ITL
                 # and TTFT on A100. Note it is not optimized for throughput.
                 max_num_batched_tokens = 512

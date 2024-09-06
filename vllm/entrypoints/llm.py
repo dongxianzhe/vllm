@@ -11,7 +11,7 @@ from vllm.entrypoints.chat_utils import (ChatCompletionMessageParam,
 from vllm.inputs import PromptInputs, TextPrompt, TokensPrompt
 from vllm.inputs.parse import parse_and_batch_prompt
 from vllm.logger import init_logger
-from vllm.lora.request import LoRARequest
+from vllm.lora.request import LoRARequessss
 from vllm.model_executor.guided_decoding import (
     GuidedDecodingRequest, get_local_guided_decoding_logits_processor)
 from vllm.model_executor.guided_decoding.guided_fields import LLMGuidedOptions
@@ -26,7 +26,8 @@ from vllm.usage.usage_lib import UsageContext
 from vllm.utils import Counter, deprecate_kwargs
 
 logger = init_logger(__name__)
-
+from vllm.clogger import init_clogger
+clogger = init_clogger()
 
 class LLM:
     """An LLM for generating texts from given prompts and sampling parameters.
@@ -140,6 +141,7 @@ class LLM:
         for encoder/decoder models, since encoder/decoder models
         do not currently support CUDAGraph.
         '''
+        clogger.debug('hello world')
 
         if "disable_log_stats" not in kwargs:
             kwargs["disable_log_stats"] = True
@@ -164,7 +166,7 @@ class LLM:
             revision=revision,
             tokenizer_revision=tokenizer_revision,
             seed=seed,
-            gpu_memory_utilization=gpu_memory_utilization,
+            gpu_memory_utilization=gpu_memory_utilization, # 0.9
             swap_space=swap_space,
             cpu_offload_gb=cpu_offload_gb,
             enforce_eager=enforce_eager,

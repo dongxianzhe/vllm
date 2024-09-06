@@ -56,6 +56,9 @@ from vllm.utils import Counter, Device
 from vllm.version import __version__ as VLLM_VERSION
 
 logger = init_logger(__name__)
+from vllm.clogger import init_clogger
+clogger = init_clogger()
+
 _LOCAL_LOGGING_INTERVAL_SEC = 5
 
 
@@ -200,7 +203,7 @@ class LLMEngine:
         decoding_config: Optional[DecodingConfig],
         observability_config: Optional[ObservabilityConfig],
         prompt_adapter_config: Optional[PromptAdapterConfig],
-        executor_class: Type[ExecutorBase],
+        executor_class: Type[ExecutorBase], # 通过 from_engine_args 传进来的
         log_stats: bool,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         stat_loggers: Optional[Dict[str, StatLoggerBase]] = None,
@@ -225,37 +228,38 @@ class LLMEngine:
             "num_scheduler_steps=%d, enable_prefix_caching=%s, "
             "use_async_output_proc=%s)",
             VLLM_VERSION,
-            model_config.model,
-            speculative_config,
-            model_config.tokenizer,
-            model_config.skip_tokenizer_init,
-            model_config.tokenizer_mode,
-            model_config.revision,
-            model_config.rope_scaling,
-            model_config.rope_theta,
-            model_config.tokenizer_revision,
-            model_config.trust_remote_code,
-            model_config.dtype,
-            model_config.max_model_len,
-            load_config.download_dir,
-            load_config.load_format,
-            parallel_config.tensor_parallel_size,
-            parallel_config.pipeline_parallel_size,
-            parallel_config.disable_custom_all_reduce,
-            model_config.quantization,
-            model_config.enforce_eager,
-            cache_config.cache_dtype,
-            model_config.quantization_param_path,
-            device_config.device,
-            decoding_config,
-            observability_config,
-            model_config.seed,
-            model_config.served_model_name,
-            scheduler_config.use_v2_block_manager,
+            model_config.model,# model='facebook/opt-125m',
+            speculative_config, # speculative_config=None,
+            model_config.tokenizer,  # tokenizer='facebook/opt-125m',
+            model_config.skip_tokenizer_init,# skip_tokenizer_init=False,
+            model_config.tokenizer_mode,# tokenizer_mode=auto,
+            model_config.revision,# revision=None,
+            model_config.rope_scaling,# rope_scaling=None,
+            model_config.rope_theta,# rope_theta=None,
+            model_config.tokenizer_revision,# tokenizer_revision=None,
+            model_config.trust_remote_code,# trust_remote_code=False,
+            model_config.dtype,# dtype=torch.float16,
+            model_config.max_model_len,# max_seq_len=2048,
+            load_config.download_dir,# download_dir=None,
+            load_config.load_format,# load_format=LoadFormat.AUTO,
+            parallel_config.tensor_parallel_size,# tensor_parallel_size=1,
+            parallel_config.pipeline_parallel_size,# pipeline_parallel_size=1,
+            parallel_config.disable_custom_all_reduce,# disable_custom_all_reduce=False,
+            model_config.quantization,# quantization=None,
+            model_config.enforce_eager,# enforce_eager=False,
+            cache_config.cache_dtype,# kv_cache_dtype=auto,
+            model_config.quantization_param_path,# quantization_param_path=None,
+            device_config.device,# device_config=cuda,
+            decoding_config,# decoding_config=DecodingConfig(guided_decoding_backend='outlines'),
+            observability_config,# observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False),
+            model_config.seed,# seed=0,
+            model_config.served_model_name,# served_model_name=facebook/opt-125m,
+            scheduler_config.use_v2_block_manager,# use_v2_block_manager=False,
             scheduler_config.num_scheduler_steps,
-            cache_config.enable_prefix_caching,
+            cache_config.enable_prefix_caching,# enable_prefix_caching=False
             model_config.use_async_output_proc,
         )
+        
         # TODO(woosuk): Print more configs in debug mode.
         from vllm.plugins import load_general_plugins
         load_general_plugins()
@@ -311,6 +315,7 @@ class LLMEngine:
             prompt_adapter_config=prompt_adapter_config,
             observability_config=self.observability_config,
         )
+        clogger.debug(f'model_executor: {executor_class}')
 
         if not self.model_config.embedding_mode:
             self._initialize_kv_caches()
@@ -527,7 +532,7 @@ class LLMEngine:
         return executor_class
 
     @classmethod
-    def from_engine_args(
+    def from_engine_args( # LLMEngine工厂方法
         cls,
         engine_args: EngineArgs,
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
@@ -536,7 +541,7 @@ class LLMEngine:
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
         engine_config = engine_args.create_engine_config()
-        executor_class = cls._get_executor_cls(engine_config)
+        executor_class = cls._get_executor_cls(engine_config) # 根据各种engine_config创建
         # Create the LLM engine.
         engine = cls(
             **engine_config.to_dict(),
@@ -702,7 +707,7 @@ class LLMEngine:
             raise ValueError(
                 "Either SamplingParams or PoolingParams must be provided.")
 
-        # Add the sequence group to the scheduler with least unfinished seqs.
+        # Add the sequence group to the scheduler with least unfinished seqs. 这里可以改调度策略
         costs = [
             scheduler.get_num_unfinished_seq_groups()
             for scheduler in self.scheduler

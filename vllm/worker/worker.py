@@ -30,6 +30,8 @@ from vllm.worker.model_runner import GPUModelRunnerBase, ModelRunner
 from vllm.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
 
 logger = init_logger(__name__)
+from vllm.clogger import init_clogger
+clogger = init_clogger()
 
 
 class Worker(LocalOrDistributedWorkerBase):
@@ -42,15 +44,15 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def __init__(
         self,
-        model_config: ModelConfig,
+        model_config: ModelConfig, # gpu_executor 的 _get_create_worker_kwargs 传进来的
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         cache_config: CacheConfig,
         load_config: LoadConfig,
-        local_rank: int,
-        rank: int,
-        distributed_init_method: str,
+        local_rank: int, # gpu_executor的create_worker方法传进来的参数
+        rank: int, # gpu_executor的create_worker方法传进来的参数
+        distributed_init_method: str, # gpu_executor的create_worker方法传进来的参数
         lora_config: Optional[LoRAConfig] = None,
         speculative_config: Optional[SpeculativeConfig] = None,
         prompt_adapter_config: Optional[PromptAdapterConfig] = None,
@@ -58,6 +60,7 @@ class Worker(LocalOrDistributedWorkerBase):
         model_runner_cls: Optional[Type[GPUModelRunnerBase]] = None,
         observability_config: Optional[ObservabilityConfig] = None,
     ) -> None:
+        clogger.debug('worker created')
         self.model_config = model_config
         self.parallel_config = parallel_config
         self.parallel_config.rank = rank
@@ -89,13 +92,14 @@ class Worker(LocalOrDistributedWorkerBase):
                 not in ["medusa", "mlp_speculator", "eagle"]) \
                     else {"return_hidden_states": True}
 
-        ModelRunnerClass: Type[GPUModelRunnerBase] = ModelRunner
+        ModelRunnerClass: Type[GPUModelRunnerBase] = ModelRunner # Type用于表示ModelRunnerClass是一个类而不是对象
         if model_runner_cls is not None:
             ModelRunnerClass = model_runner_cls
         elif self._is_embedding_model():
             ModelRunnerClass = EmbeddingModelRunner
         elif self._is_encoder_decoder_model():
             ModelRunnerClass = EncoderDecoderModelRunner
+        clogger.debug(f'model runner class {ModelRunnerClass}')
         self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
             model_config,
             parallel_config,
@@ -152,6 +156,7 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
+            clogger.debug('worker: self.device_config.device.type == "cuda"')
             # torch.distributed.all_reduce does not free the input tensor until
             # the synchronization point. This causes the memory usage to grow
             # as the number of all_reduce calls increases. This env var disables
@@ -168,6 +173,7 @@ class Worker(LocalOrDistributedWorkerBase):
             _check_if_gpu_supports_dtype(self.model_config.dtype)
             torch.cuda.empty_cache()
             self.init_gpu_memory = torch.cuda.mem_get_info()[0]
+            clogger.debug(f'worker: torch.cuda.mem_get_info() {torch.cuda.mem_get_info()}')
         else:
             raise RuntimeError(
                 f"Not support device type: {self.device_config.device}")

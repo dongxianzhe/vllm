@@ -18,6 +18,8 @@ from vllm.sequence import (Sequence, SequenceData, SequenceGroup,
 from vllm.utils import Device, PyObjectCache
 
 logger = init_logger(__name__)
+from vllm.clogger import init_clogger
+clogger = init_clogger()
 
 # Test-only. If configured, decode is preempted with
 # ARTIFICIAL_PREEMPTION_PROB% probability.
@@ -327,6 +329,9 @@ class Scheduler:
         num_cpu_blocks = cache_config.num_cpu_blocks
         if num_cpu_blocks:
             num_cpu_blocks //= pipeline_parallel_size
+
+        clogger.debug(f'num_gpu_blocks {num_gpu_blocks}')
+        clogger.debug(f'num_cpu_blocks {num_cpu_blocks}')
 
         # Create the block space manager.
         self.block_manager = BlockSpaceManagerImpl(
