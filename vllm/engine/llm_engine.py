@@ -1100,6 +1100,7 @@ class LLMEngine:
                     seq_group.update_num_computed_tokens(
                         seq_group_meta.token_chunk_size or 0)
 
+            token_time = time.perf_counter()
             if outputs:
                 for o in outputs:
                     if (isinstance(o, SamplerOutput)
@@ -1116,6 +1117,8 @@ class LLMEngine:
                         else:
                             seq_group.metrics.model_execute_time = (
                                 o.model_execute_time)
+                        seq_group.metrics.token_times.append(token_time)
+
 
             if self.model_config.embedding_mode:
                 self._process_sequence_group_outputs(seq_group, output)
