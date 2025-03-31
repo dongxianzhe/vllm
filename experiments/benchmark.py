@@ -2,7 +2,7 @@ import time
 import random
 import asyncio
 import argparse
-import tabulate
+from tabulate import tabulate
 import numpy as np
 from tqdm import tqdm
 from openai import AsyncOpenAI
@@ -85,6 +85,7 @@ async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, pbar
                 },
             ],
         }], 
+        max_tokens=128, 
         model = args.model,
         temperature=0., 
         stream=True, 

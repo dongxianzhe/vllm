@@ -5,6 +5,8 @@ SCRIPT_DIR=$(dirname "$SCRIPT")
 RESULT_DIR="$SCRIPT_DIR/result"
 VLLM_ROOT_DIR=$(realpath "$SCRIPT_DIR/../")
 export CUDA_VISIBLE_DEVICES=0
+export TEST=1
+export PRINT_LATENCY=1
 
 clean_up() {
     echo "Cleaning up..."
@@ -21,6 +23,8 @@ evaluate_vllm() {
     vllm serve llava-hf/llava-1.5-7b-hf \
     --port=8888 \
     --chat-template=$VLLM_ROOT_DIR/examples/template_llava.jinja \
+    --enable-chunked-prefill\
+    --max-num-batched-tokens=1024\
     --enforce-eager \
     > $RESULT_DIR/vllm_api_server.log 2>&1 &
 
@@ -40,10 +44,11 @@ evaluate_vllm() {
     echo "Start benchmarking"
 
     conda run -n vllm --no-capture-output \
-    python benchmark.py --num-requests=99 --model=llava-hf/llava-1.5-7b-hf --port=8888 \
+    python benchmark.py --num-requests=100 --model=llava-hf/llava-1.5-7b-hf --port=8888 \
     --test-correctness \
     --test-performance \
     --slo-analysis \
+    --request-rate 2 \
     > $RESULT_DIR/result.log
 
     echo "Finished evaluating vllm"

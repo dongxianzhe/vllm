@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import os
 
 import queue
 import signal
@@ -58,6 +59,7 @@ class EngineCore:
 
         # Setup Model.
         self.model_executor = executor_class(vllm_config)
+        print(f'type(self.model_executor) {type(self.model_executor)}')
 
         # Setup KV Caches and update CacheConfig after profiling.
         num_gpu_blocks, num_cpu_blocks = self._initialize_kv_caches(
@@ -192,10 +194,19 @@ class EngineCore:
                 scheduler_stats=self.scheduler.make_stats(),
             )
         scheduler_output = self.scheduler.schedule()
+        print('-----------------------------step begin-------------------------------')
+        start = time.perf_counter() 
+        print(f'num_scheduled_tokens: {scheduler_output.num_scheduled_tokens}')
+        print(f'scheduled_encoder_inputs {scheduler_output.scheduled_encoder_inputs}')
         output = self.model_executor.execute_model(scheduler_output)
+        # vllm.v1.outputs.ModelRunnerOutput
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, output)  # type: ignore
 
+        end = time.perf_counter() 
+        if os.getenv("PRINT_LATENCY", "0") == "1":
+            print(f'step latency {end - start}')
+        print('-----------------------------step end-------------------------------')
         return engine_core_outputs
 
     def step_with_batch_queue(self) -> Optional[EngineCoreOutputs]:

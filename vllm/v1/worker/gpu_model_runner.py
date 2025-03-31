@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import os
 
 import gc
 import time
@@ -971,8 +972,13 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
         if self.is_multimodal_model:
             # Run the multimodal encoder if any.
+            start = time.perf_counter()
             self._execute_encoder(scheduler_output)
+            end = time.perf_counter()
             encoder_outputs = self._gather_encoder_outputs(scheduler_output)
+            if os.getenv("PRINT_LATENCY", "0") == "1":
+                print(f'encode latency {end - start}')
+                print(f'GPUModelRunner encoder_outputs {[encoder_output.shape for encoder_output in encoder_outputs]}')
         else:
             encoder_outputs = []
 
@@ -1032,6 +1038,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
 
         # Run the decoder.
         # Use persistent buffers for CUDA graphs.
+        start = time.perf_counter()
         with set_forward_context(attn_metadata, self.vllm_config):
             hidden_states = self.model(
                 input_ids=input_ids,
@@ -1039,6 +1046,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 intermediate_tensors=intermediate_tensors,
                 inputs_embeds=inputs_embeds,
             )
+        end = time.perf_counter()
+        if os.getenv("PRINT_LATENCY", "0") == "1":
+            print(f'language latency {end - start}')
         if not get_pp_group().is_last_rank:
             # For mid-pipeline stages, return the hidden states.
             return hidden_states

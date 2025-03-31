@@ -1,3 +1,4 @@
+import os
 import base64
 import random
 from datasets import load_dataset
@@ -32,6 +33,7 @@ class SyntheticDataset:
         self.num_requests = num_requests
         self.max_index = len(self.dataset)
         self.requests_made = 0
+        self.test = os.getenv("TEST", "0") == '1'
 
     def __iter__(self):
         return self
@@ -40,7 +42,10 @@ class SyntheticDataset:
         if self.requests_made >= self.num_requests:
             raise StopIteration
         
-        index = random.randint(0, self.max_index - 1)
+        if self.test:
+            index = 0
+        else:
+            index = random.randint(0, self.max_index - 1)
         data = self.dataset[index]
         self.requests_made += 1
         entry = SyntheticDataEntry(
