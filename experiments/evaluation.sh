@@ -24,6 +24,7 @@ evaluate_vllm() {
     --port=8888 \
     --chat-template=$VLLM_ROOT_DIR/examples/template_llava.jinja \
     --enable-chunked-prefill\
+    --no-enable-prefix-caching\
     --max-num-batched-tokens=1024\
     --enforce-eager \
     > $RESULT_DIR/vllm_api_server.log 2>&1 &
@@ -50,6 +51,10 @@ evaluate_vllm() {
     --slo-analysis \
     --request-rate 2 \
     > $RESULT_DIR/result.log
+
+
+    conda run -n vllm --no-capture-output \
+    python get_latency.py
 
     echo "Finished evaluating vllm"
 

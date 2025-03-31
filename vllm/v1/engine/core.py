@@ -193,19 +193,35 @@ class EngineCore:
                 outputs=[],
                 scheduler_stats=self.scheduler.make_stats(),
             )
-        scheduler_output = self.scheduler.schedule()
         print('-----------------------------step begin-------------------------------')
+        scheduler_output = self.scheduler.schedule()
+
+        print(f'scheduler_output.scheduled_new_reqs           : {scheduler_output.scheduled_new_reqs}')
+        print(f'scheduler_output.scheduled_cached_reqs        : {scheduler_output.scheduled_cached_reqs}')
+        print(f'scheduler_output.num_scheduled_tokens         : {scheduler_output.num_scheduled_tokens}')
+        print(f'scheduler_output.total_num_scheduled_tokens   : {scheduler_output.total_num_scheduled_tokens}')
+        print(f'scheduler_output.scheduled_spec_decode_tokens : {scheduler_output.scheduled_spec_decode_tokens}')
+        print(f'scheduler_output.scheduled_encoder_inputs     : {scheduler_output.scheduled_encoder_inputs}')
+        print(f'scheduler_output.num_common_prefix_blocks     : {scheduler_output.num_common_prefix_blocks}')
+        print(f'scheduler_output.finished_req_ids             : {scheduler_output.finished_req_ids}')
+        print(f'scheduler_output.free_encoder_input_ids       : {scheduler_output.free_encoder_input_ids}')
+        print(f'scheduler_output.structured_output_request_ids: {scheduler_output.structured_output_request_ids}')
+        print(f'scheduler_output.grammar_bitmask              : {scheduler_output.grammar_bitmask}')
+
         start = time.perf_counter() 
-        print(f'num_scheduled_tokens: {scheduler_output.num_scheduled_tokens}')
-        print(f'scheduled_encoder_inputs {scheduler_output.scheduled_encoder_inputs}')
         output = self.model_executor.execute_model(scheduler_output)
-        # vllm.v1.outputs.ModelRunnerOutput
+        print(f'output.req_ids             : {output.req_ids}')
+        print(f'output.req_id_to_index     : {output.req_id_to_index}')
+        print(f'output.sampled_token_ids   : {output.sampled_token_ids}')
+        print(f'output.spec_token_ids      : {output.spec_token_ids}')
+        print(f'output.logprobs            : {output.logprobs}')
+        print(f'output.prompt_logprobs_dict: {output.prompt_logprobs_dict}')
         engine_core_outputs = self.scheduler.update_from_output(
             scheduler_output, output)  # type: ignore
 
         end = time.perf_counter() 
         if os.getenv("PRINT_LATENCY", "0") == "1":
-            print(f'step latency {end - start}')
+            print(f'step latency {end - start:.3f}')
         print('-----------------------------step end-------------------------------')
         return engine_core_outputs
 

@@ -977,7 +977,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             end = time.perf_counter()
             encoder_outputs = self._gather_encoder_outputs(scheduler_output)
             if os.getenv("PRINT_LATENCY", "0") == "1":
-                print(f'encode latency {end - start}')
+                print(f'encode latency {end - start:.3f}')
                 print(f'GPUModelRunner encoder_outputs {[encoder_output.shape for encoder_output in encoder_outputs]}')
         else:
             encoder_outputs = []
@@ -1046,9 +1046,6 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 intermediate_tensors=intermediate_tensors,
                 inputs_embeds=inputs_embeds,
             )
-        end = time.perf_counter()
-        if os.getenv("PRINT_LATENCY", "0") == "1":
-            print(f'language latency {end - start}')
         if not get_pp_group().is_last_rank:
             # For mid-pipeline stages, return the hidden states.
             return hidden_states
@@ -1135,6 +1132,9 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             spec_token_ids = self.generate_draft_token_ids(
                 valid_sampled_token_ids, sampling_metadata)
 
+        end = time.perf_counter()
+        if os.getenv("PRINT_LATENCY", "0") == "1":
+            print(f'language latency {end - start:.3f}')
         return ModelRunnerOutput(
             req_ids=self.input_batch.req_ids,
             req_id_to_index=self.input_batch.req_id_to_index,
