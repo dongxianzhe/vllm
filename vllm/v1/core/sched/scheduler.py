@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
+import os
 
 import time
 from collections import deque
@@ -39,6 +40,9 @@ class Scheduler(SchedulerInterface):
         log_stats: bool,
         structured_output_manager: StructuredOutputManager,
     ) -> None:
+        self.stage_level_schedule = os.getenv("STAGE_LEVEL_SCHEDULE", "0") == "1"
+        print(f'stage_level_schedule {self.stage_level_schedule}')
+
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
         self.lora_config = lora_config
@@ -93,6 +97,9 @@ class Scheduler(SchedulerInterface):
             model_config=model_config,
             scheduler_config=scheduler_config,
         )
+        if self.stage_level_schedule:
+            encoder_cache_size = 576 * 10
+            encoder_compute_budget = 576 * 10
 
         # NOTE(woosuk): Here, "encoder" includes the vision encoder (and
         # projector if needed). Currently, we assume that the encoder also
@@ -156,11 +163,12 @@ class Scheduler(SchedulerInterface):
             assert num_new_tokens > 0
 
             # Schedule encoder inputs.
-            encoder_inputs_to_schedule, num_new_tokens, new_encoder_budget = (
+            encoder_inputs_to_schedule, num_new_tokens, new_encoder_budget, token_budget = (
                 self._try_schedule_encoder_inputs(request,
                                                   request.num_computed_tokens,
                                                   num_new_tokens,
-                                                  encoder_budget))
+                                                  encoder_budget,
+                                                  token_budget))
             if num_new_tokens == 0:
                 # The request cannot be scheduled because the encoder budget
                 # or the encoder cache is exhausted.
@@ -304,9 +312,10 @@ class Scheduler(SchedulerInterface):
 
                 # Schedule encoder inputs.
                 (encoder_inputs_to_schedule, num_new_tokens,
-                 new_encoder_budget) = self._try_schedule_encoder_inputs(
+                 new_encoder_budget, token_budget) = self._try_schedule_encoder_inputs(
                      request, num_computed_tokens, num_new_tokens,
-                     encoder_budget)
+                     encoder_budget,
+                     token_budget)
                 if num_new_tokens == 0:
                     # The request cannot be scheduled.
                     break
@@ -462,6 +471,7 @@ class Scheduler(SchedulerInterface):
         num_computed_tokens: int,
         num_new_tokens: int,
         encoder_budget: int,
+        token_budget: int,
     ) -> tuple[list[int], int, int]:
         """
         Determine which encoder inputs need to be scheduled in the current step,
@@ -522,9 +532,17 @@ class Scheduler(SchedulerInterface):
                     num_new_tokens = 0
                 break
 
+
             encoder_budget -= num_encoder_tokens
             encoder_inputs_to_schedule.append(i)
-        return encoder_inputs_to_schedule, num_new_tokens, encoder_budget
+            if self.stage_level_schedule:
+                num_new_tokens = 1
+                if token_budget <= 16:
+                    continue
+                else:
+                    token_budget = max(token_budget - 576, 16)
+
+        return encoder_inputs_to_schedule, num_new_tokens, encoder_budget, token_budget
 
     def update_from_output(
         self,

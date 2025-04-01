@@ -49,7 +49,7 @@ evaluate_vllm() {
     --test-correctness \
     --test-performance \
     --slo-analysis \
-    --request-rate 2 \
+    --request-rate 10 \
     > $RESULT_DIR/result.log
 
 
