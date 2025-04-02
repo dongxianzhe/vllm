@@ -1,3 +1,4 @@
+import os
 import time
 import random
 import asyncio
@@ -155,8 +156,13 @@ def main(args: argparse.Namespace):
     np.random.seed(args.seed)
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     dataset = SyntheticDataset(
-        num_requests=args.num_requests, 
-    )
+        num_requests = args.num_requests, 
+        textcaps     = args.textcaps, 
+        pope         = args.pope, 
+        mme          = args.mme, 
+        text_vqa     = args.text_vqa, 
+        vizwiz_vqa   = args.vizwiz_vqa, 
+    )                 
     results = benchmarks(args, dataset)
     log_result(args, dataset, results)
 
@@ -202,6 +208,11 @@ if __name__ == '__main__':
         default=False,
         help='test slo'
     ) 
+    parser.add_argument("--textcaps", type=int, default=int(os.environ.get("TEXTCAPS", 0)))
+    parser.add_argument("--pope", type=int, default=int(os.environ.get("POPE", 0)))
+    parser.add_argument("--mme", type=int, default=int(os.environ.get("MME", 0)))
+    parser.add_argument("--text_vqa", type=int, default=int(os.environ.get("TEXT_VQA", 0)))
+    parser.add_argument("--vizwiz_vqa", type=int, default=int(os.environ.get("VIZWIZ_VQA", 0)))
     args, remain_args = parser.parse_known_args()
     print(f'benchmark args {args}')
     main(args)

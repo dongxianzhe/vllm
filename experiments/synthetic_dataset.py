@@ -28,25 +28,82 @@ class SyntheticDataset:
         self, 
         num_requests: int,
         textcaps: int = 1, 
+        pope: int = 0, 
+        mme: int = 0, 
+        text_vqa: int = 0,
+        vizwiz_vqa: int = 0, 
     ):
-        self.dataset = load_dataset("lmms-lab/TextCaps", split="test")
-        self.entries: list[SyntheticDataEntry] = []
-        for data in self.dataset:
-            entry = SyntheticDataEntry(
-                prompt = data['question'], 
-                image = encode_base64_content_from_image(data['image']), 
-                ttft_slo = 2.,
-                tpot_slo = 0.16, 
-            )
-            self.entries.append(entry)
-            if len(self.entries) == num_requests:
-                break
-        self.num_requests = num_requests
-        self.max_index = len(self.dataset)
         self.test = os.getenv("TEST", "0") == '1'
+        self.num_requests = num_requests
+        datasets = []
+        dataset_iters = []
+        datasets_name: list[str] = []
+        weights: list[int] = []
+
+        flags = [
+            textcaps, 
+            pope, 
+            mme, 
+            text_vqa, 
+            vizwiz_vqa, 
+        ]
+        names = [
+            "lmms-lab/TextCaps", 
+            "lmms-lab/POPE", 
+            "lmms-lab/MME", 
+            "lmms-lab/textvqa", 
+            "lmms-lab/VizWiz-VQA", 
+        ]
+        for flag, name in zip(flags, names):
+            if flag > 0:
+                dataset = load_dataset(name, split="test")
+                datasets.append(dataset)
+                dataset_iters.append(iter(dataset))
+                datasets_name.append(name)
+                weights.append(flag)
+
+        chosen_datasets = random.choices(population=range(len(weights)), weights=weights, k=num_requests)
+
+        self.entries: list[SyntheticDataEntry] = []
+        for i in chosen_datasets:
+            dataset = datasets[i]
+            dataset_iter = dataset_iters[i]
+            name = datasets_name[i]
+            if self.test:
+                data = dataset[0]
+            else:
+                data = next(dataset_iter)
+            if name in [
+                "lmms-lab/TextCaps", 
+                "lmms-lab/POPE", 
+                "lmms-lab/MME", 
+                "lmms-lab/textvqa", 
+                "lmms-lab/VizWiz-VQA", 
+            ]: 
+                entry = SyntheticDataEntry(
+                    prompt = data['question'], 
+                    image = encode_base64_content_from_image(data['image']), 
+                    ttft_slo = 2.,
+                    tpot_slo = 0.14, 
+                )
+            else:
+                raise Exception('invalid dataset')
+            self.entries.append(entry)
 
     def __len__(self):
         return self.num_requests
 
     def __getitem__(self, i: int) -> SyntheticDataEntry:
         return self.entries[i]
+
+if __name__ == '__main__':
+    dataset = SyntheticDataset(
+        num_requests=10, 
+        textcaps = 1, 
+        pope = 1, 
+        mme = 1, 
+        text_vqa = 1,
+        vizwiz_vqa = 1, 
+    )
+    for i in range(10):
+        print(dataset[i].prompt)
