@@ -60,6 +60,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
         vllm_config: VllmConfig,
         device: torch.device,
     ):
+        self.print_latency = os.getenv("PRINT_LATENCY", "0") == "1"
         self.vllm_config = vllm_config
         self.model_config = vllm_config.model_config
         self.cache_config = vllm_config.cache_config
@@ -976,7 +977,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
             self._execute_encoder(scheduler_output)
             end = time.perf_counter()
             encoder_outputs = self._gather_encoder_outputs(scheduler_output)
-            if os.getenv("PRINT_LATENCY", "0") == "1":
+            if self.print_latency:
                 print(f'encode latency {end - start:.3f}')
                 print(f'GPUModelRunner encoder_outputs {[encoder_output.shape for encoder_output in encoder_outputs]}')
         else:
@@ -1133,7 +1134,7 @@ class GPUModelRunner(LoRAModelRunnerMixin):
                 valid_sampled_token_ids, sampling_metadata)
 
         end = time.perf_counter()
-        if os.getenv("PRINT_LATENCY", "0") == "1":
+        if self.print_latency:
             print(f'language latency {end - start:.3f}')
         return ModelRunnerOutput(
             req_ids=self.input_batch.req_ids,
