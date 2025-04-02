@@ -6,12 +6,20 @@ RESULT_DIR="$SCRIPT_DIR/result"
 VLLM_ROOT_DIR=$(realpath "$SCRIPT_DIR/../")
 MODEL="llava-hf/llava-1.5-7b-hf"
 MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/llava-1.5-7b-hf"
-REQUEST_RATES="4 5 6 7 8"
+REQUEST_RATES="1 2 3 4 5 6 7 8 9 10 11 12"
+NUM_REQUESTS=500
 export CUDA_VISIBLE_DEVICES=1
-export TEST=1
+export TEST=0
 export PRINT_LATENCY=1
 export DEBUG_SCHEDULE=1
-export TPOT_SLO=0.16
+ 
+ scenarios=(
+    "--textcaps=1 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=1 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=1 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=0 --text_vqa=1 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=1"
+)
 
 clean_up() {
     echo "Cleaning up..."
@@ -51,14 +59,17 @@ evaluate_vllm() {
     echo "apiserver is running on port 8888"
     echo "Start benchmarking"
 
-    conda run -n vllm --no-capture-output \
-    python benchmark.py --num-requests=100 --model=$MODEL_PATH --port=8888 \
-    --test-correctness \
-    --test-performance \
-    --slo-analysis \
-    --request-rate ${REQUEST_RATES} \
-    > $RESULT_DIR/baseline_result.log
-
+    for scenario in "${scenarios[@]}"; do
+        echo "Running scenario: $scenario"
+        conda run -n vllm --no-capture-output \
+        python benchmark.py --num-requests=$NUM_REQUESTS --model=$MODEL_PATH --port=8888 \
+        --test-correctness \
+        --test-performance \
+        --slo-analysis \
+        $scenario \
+        --request-rate ${REQUEST_RATES} \
+        > $RESULT_DIR/baseline_${scenario// /_}_result.log
+    done
 
     conda run -n vllm --no-capture-output \
     python get_latency.py --input-name baseline --output-name baseline
@@ -97,14 +108,17 @@ evaluate_stage_level_schedule() {
     echo "apiserver is running on port 8888"
     echo "Start benchmarking"
 
-    conda run -n vllm --no-capture-output \
-    python benchmark.py --num-requests=100 --model=$MODEL_PATH --port=8888 \
-    --test-correctness \
-    --test-performance \
-    --slo-analysis \
-    --request-rate ${REQUEST_RATES} \
-    > $RESULT_DIR/stage_level_schedule_result.log
-
+    for scenario in "${scenarios[@]}"; do
+        echo "Running scenario: $scenario"
+        conda run -n vllm --no-capture-output \
+        python benchmark.py --num-requests=$NUM_REQUESTS --model=$MODEL_PATH --port=8888 \
+        --test-correctness \
+        --test-performance \
+        --slo-analysis \
+        $scenario \
+        --request-rate ${REQUEST_RATES} \
+        > $RESULT_DIR/stage_level_schedule_${scenario// /_}_result.log
+    done
 
     conda run -n vllm --no-capture-output \
     python get_latency.py --input-name stage_level_schedule --output-name stage_level_schedule
