@@ -1,6 +1,12 @@
 import re
+import argparse
 
-log_file = "result/vllm_api_server.log"
+parser = argparse.ArgumentParser()
+parser.add_argument('--input-name', type=str)
+parser.add_argument('--output-name', type=str)
+args = parser.parse_args()
+
+log_file = f"result/{args.input_name}_api_server.log"
 
 patterns = [
     re.compile(r"step latency (\d+\.\d+)"),
@@ -9,9 +15,9 @@ patterns = [
 ]
 
 output_files = [
-    "result/step_latency.log",
-    "result/encode latency.log",
-    "result/language latency.log",
+    f"result/{args.output_name}_step_latency.log",
+    f"result/{args.output_name}_encode latency.log",
+    f"result/{args.output_name}_language latency.log",
 ]
 
 for pattern, output_file in zip(patterns, output_files):

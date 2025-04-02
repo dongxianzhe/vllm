@@ -116,6 +116,7 @@ async def benchmark(args: argparse.Namespace, dataset: SyntheticDataset, client:
 
     metric_builder.end()
     recv_pbar.close()
+    assert len(outputs) > 0
     for output in outputs:
         metric_builder.append(
             input_len = len(output.entry.prompt), # todo

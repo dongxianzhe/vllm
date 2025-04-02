@@ -30,31 +30,23 @@ class SyntheticDataset:
         textcaps: int = 1, 
     ):
         self.dataset = load_dataset("lmms-lab/TextCaps", split="test")
+        self.entries: list[SyntheticDataEntry] = []
+        for data in self.dataset:
+            entry = SyntheticDataEntry(
+                prompt = data['question'], 
+                image = encode_base64_content_from_image(data['image']), 
+                ttft_slo = 2.,
+                tpot_slo = 0.16, 
+            )
+            self.entries.append(entry)
+            if len(self.entries) == num_requests:
+                break
         self.num_requests = num_requests
         self.max_index = len(self.dataset)
-        self.requests_made = 0
         self.test = os.getenv("TEST", "0") == '1'
-
-    def __iter__(self):
-        return self
-
-    def __next__(self) -> SyntheticDataEntry:
-        if self.requests_made >= self.num_requests:
-            raise StopIteration
-        
-        if self.test:
-            index = 0
-        else:
-            index = random.randint(0, self.max_index - 1)
-        data = self.dataset[index]
-        self.requests_made += 1
-        entry = SyntheticDataEntry(
-            prompt = data['question'], 
-            image = encode_base64_content_from_image(data['image']), 
-            ttft_slo = 2.,
-            tpot_slo = 0.08, 
-        )
-        return entry
 
     def __len__(self):
         return self.num_requests
+
+    def __getitem__(self, i: int) -> SyntheticDataEntry:
+        return self.entries[i]

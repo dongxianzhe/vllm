@@ -148,6 +148,8 @@ class Scheduler(SchedulerInterface):
         # For logging.
         scheduled_timestamp = time.monotonic()
 
+        has_prefill: bool = False
+        has_encode: bool = False
         # First, schedule the RUNNING requests.
         req_index = 0
         while req_index < len(self.running) and token_budget > 0:
@@ -163,12 +165,12 @@ class Scheduler(SchedulerInterface):
             assert num_new_tokens > 0
 
             # Schedule encoder inputs.
-            encoder_inputs_to_schedule, num_new_tokens, new_encoder_budget, token_budget = (
+            encoder_inputs_to_schedule, num_new_tokens, new_encoder_budget, token_budget, has_prefill, has_encode = (
                 self._try_schedule_encoder_inputs(request,
                                                   request.num_computed_tokens,
                                                   num_new_tokens,
                                                   encoder_budget,
-                                                  token_budget))
+                                                  token_budget, has_prefill, has_encode))
             if num_new_tokens == 0:
                 # The request cannot be scheduled because the encoder budget
                 # or the encoder cache is exhausted.
@@ -312,10 +314,10 @@ class Scheduler(SchedulerInterface):
 
                 # Schedule encoder inputs.
                 (encoder_inputs_to_schedule, num_new_tokens,
-                 new_encoder_budget, token_budget) = self._try_schedule_encoder_inputs(
+                 new_encoder_budget, token_budget, has_prefill, has_encode) = self._try_schedule_encoder_inputs(
                      request, num_computed_tokens, num_new_tokens,
                      encoder_budget,
-                     token_budget)
+                     token_budget, has_prefill, has_encode)
                 if num_new_tokens == 0:
                     # The request cannot be scheduled.
                     break
@@ -472,7 +474,9 @@ class Scheduler(SchedulerInterface):
         num_new_tokens: int,
         encoder_budget: int,
         token_budget: int,
-    ) -> tuple[list[int], int, int]:
+        has_prefill: bool, 
+        has_encode: bool,
+    ) -> tuple[list[int], int, int, int, int, int]:
         """
         Determine which encoder inputs need to be scheduled in the current step,
         and update `num_new_tokens` and encoder token budget accordingly.
@@ -490,7 +494,7 @@ class Scheduler(SchedulerInterface):
         decoder tokens up to just before the unschedulable encoder input.
         """
         if not request.has_encoder_inputs():
-            return [], num_new_tokens, encoder_budget
+            return [], num_new_tokens, encoder_budget, token_budget, has_prefill, has_encode
 
         encoder_inputs_to_schedule: list[int] = []
         mm_positions = request.mm_positions
@@ -535,14 +539,24 @@ class Scheduler(SchedulerInterface):
 
             encoder_budget -= num_encoder_tokens
             encoder_inputs_to_schedule.append(i)
-            if self.stage_level_schedule:
-                num_new_tokens = 1
-                if token_budget <= 16:
-                    continue
-                else:
-                    token_budget = max(token_budget - 576, 16)
 
-        return encoder_inputs_to_schedule, num_new_tokens, encoder_budget, token_budget
+        if self.stage_level_schedule:
+            if len(encoder_inputs_to_schedule) > 0: # encode stage
+                if has_prefill:
+                    num_new_tokens = 0
+                else:
+                    num_new_tokens = 1
+                    has_encode = True
+            elif num_new_tokens > 1: # prefill stage
+                if has_encode:
+                    num_new_tokens = 0
+                else:
+                    has_prefill = True
+            else: # decode stage
+                pass
+
+
+        return encoder_inputs_to_schedule, num_new_tokens, encoder_budget, token_budget, has_prefill, has_encode
 
     def update_from_output(
         self,
