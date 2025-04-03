@@ -2,11 +2,12 @@ import re
 import argparse
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--dir', type=str)
 parser.add_argument('--input-name', type=str)
 parser.add_argument('--output-name', type=str)
 args = parser.parse_args()
 
-log_file = f"result/{args.input_name}_api_server.log"
+log_file = f"{args.dir}/{args.input_name}_api_server.log"
 
 patterns = [
     re.compile(r"step latency (\d+\.\d+)"),
@@ -15,9 +16,9 @@ patterns = [
 ]
 
 output_files = [
-    f"result/{args.output_name}_step_latency.log",
-    f"result/{args.output_name}_encode latency.log",
-    f"result/{args.output_name}_language latency.log",
+    f"{args.dir}/{args.output_name}_step_latency.log",
+    f"{args.dir}/{args.output_name}_encode latency.log",
+    f"{args.dir}/{args.output_name}_language latency.log",
 ]
 
 for pattern, output_file in zip(patterns, output_files):
