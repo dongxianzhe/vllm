@@ -5,6 +5,7 @@ from datasets import load_dataset
 from dataclasses import dataclass
 from PIL import Image
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
 
 
 def encode_base64_content_from_image(image: Image.Image) -> str:
@@ -65,6 +66,7 @@ class SyntheticDataset:
         chosen_datasets = random.choices(population=range(len(weights)), weights=weights, k=num_requests)
 
         self.entries: list[SyntheticDataEntry] = []
+        tasks = []
         for i in chosen_datasets:
             dataset = datasets[i]
             dataset_iter = dataset_iters[i]
@@ -73,6 +75,9 @@ class SyntheticDataset:
                 data = dataset[0]
             else:
                 data = next(dataset_iter)
+            tasks.append(data)
+
+        def create_entry(task):
             if name in [
                 "lmms-lab/TextCaps", 
                 "lmms-lab/POPE", 
@@ -88,7 +93,11 @@ class SyntheticDataset:
                 )
             else:
                 raise Exception('invalid dataset')
-            self.entries.append(entry)
+            return entry
+
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            self.entries = list(executor.map(create_entry, tasks))
+        # self.entries.append(entry)
 
     def __len__(self):
         return self.num_requests
@@ -97,13 +106,15 @@ class SyntheticDataset:
         return self.entries[i]
 
 if __name__ == '__main__':
+    import time
+    start = time.perf_counter()
     dataset = SyntheticDataset(
-        num_requests=10, 
+        num_requests=500, 
         textcaps = 1, 
-        pope = 1, 
-        mme = 1, 
-        text_vqa = 1,
+        pope = 0, 
+        mme = 0, 
+        text_vqa = 0,
         vizwiz_vqa = 1, 
     )
-    for i in range(10):
-        print(dataset[i].prompt)
+    end = time.perf_counter()
+    print(f'dur {end - start}')
