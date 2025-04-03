@@ -28,6 +28,8 @@ class SyntheticDataset:
     def __init__(
         self, 
         num_requests: int,
+        tpot_slo: float = 2., 
+        ttft_slo: float = 0.16, 
         textcaps: int = 1, 
         pope: int = 0, 
         mme: int = 0, 
@@ -78,6 +80,7 @@ class SyntheticDataset:
             tasks.append(data)
 
         def create_entry(task):
+            data = task
             if name in [
                 "lmms-lab/TextCaps", 
                 "lmms-lab/POPE", 
@@ -88,8 +91,8 @@ class SyntheticDataset:
                 entry = SyntheticDataEntry(
                     prompt = data['question'], 
                     image = encode_base64_content_from_image(data['image']), 
-                    ttft_slo = 2.,
-                    tpot_slo = 0.14, 
+                    ttft_slo = 0,
+                    tpot_slo = 0, 
                 )
             else:
                 raise Exception('invalid dataset')
@@ -97,7 +100,9 @@ class SyntheticDataset:
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             self.entries = list(executor.map(create_entry, tasks))
-        # self.entries.append(entry)
+        for entry in self.entries:
+            entry.tpot_slo = tpot_slo
+            entry.ttft_slo = ttft_slo
 
     def __len__(self):
         return self.num_requests
@@ -109,12 +114,16 @@ if __name__ == '__main__':
     import time
     start = time.perf_counter()
     dataset = SyntheticDataset(
-        num_requests=500, 
-        textcaps = 1, 
-        pope = 0, 
+        num_requests=100, 
+        tpot_slo = 2., 
+        ttft_slo = 0.16, 
+        textcaps = 0, 
+        pope = 1, 
         mme = 0, 
         text_vqa = 0,
-        vizwiz_vqa = 1, 
+        vizwiz_vqa = 0, 
     )
     end = time.perf_counter()
     print(f'dur {end - start}')
+    for i in range(10):
+        print(dataset[i].prompt)

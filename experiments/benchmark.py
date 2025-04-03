@@ -157,6 +157,8 @@ def main(args: argparse.Namespace):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     dataset = SyntheticDataset(
         num_requests = args.num_requests, 
+        ttft_slo     = args.ttft_slo, 
+        tpot_slo     = args.tpot_slo, 
         textcaps     = args.textcaps, 
         pope         = args.pope, 
         mme          = args.mme, 
@@ -208,6 +210,8 @@ if __name__ == '__main__':
         default=False,
         help='test slo'
     ) 
+    parser.add_argument("--tpot-slo", type=float, default=float(os.environ.get("TPOT_SLO", 0.16)))
+    parser.add_argument("--ttft-slo", type=float, default=float(os.environ.get("TTFT_SLO", 2.0)))
     parser.add_argument("--textcaps", type=int, default=int(os.environ.get("TEXTCAPS", 0)))
     parser.add_argument("--pope", type=int, default=int(os.environ.get("POPE", 0)))
     parser.add_argument("--mme", type=int, default=int(os.environ.get("MME", 0)))
