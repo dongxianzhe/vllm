@@ -28,7 +28,9 @@ def log_result(args: argparse.Namespace, dataset: SyntheticDataset, results: lis
                 print(f'{i}: {output_text}')
 
     if args.test_performance:
-        result.metric.print()
+        for request_rate, result in zip(args.request_rate, results):
+            print(f'=================== request rate {request_rate} metric =====================')
+            result.metric.print()
 
     if args.slo_analysis:
         print(f'==================== slo analysis ====================')
