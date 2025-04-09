@@ -27,17 +27,49 @@ def log_result(args: argparse.Namespace, dataset: SyntheticDataset, results: lis
             for i, output_text in enumerate(result.output_text):
                 print(f'{i}: {output_text}')
 
-    if args.test_performance:
-        for request_rate, result in zip(args.request_rate, results):
-            print(f'=================== request rate {request_rate} metric =====================')
-            result.metric.print()
-
-    if args.slo_analysis:
-        print(f'==================== slo analysis ====================')
-        headers = ["request_rate", "ttft_slo_attainment", "tpot_slo_attainment", "slo_attainment"]
+        headers = [
+            "Request_Rate(Req/s)", 
+            "TTFT_SLO_Attainment", 
+            "TPOT_SLO_Attainment", 
+            "SLO_Attainment", 
+            "Request_Throughput(Req/s)", 
+            "Token_Throughput(token/s)", 
+            "Avg_Latency(ms)", 
+            "Median_Latency(ms)", 
+            "P90_Latency(ms)", 
+            "P99_Latency(ms)", 
+            "Avg_TTFT(ms)", 
+            "Median_TTFT(ms)", 
+            "P90_TTFT(ms)", 
+            "P99_TTFT(ms)", 
+            "Avg_TPOT(ms)", 
+            "Median_TPOT(ms)", 
+            "P90_TPOT(ms)", 
+            "P99_TPOT(ms)", 
+            ]
+        
         data = []
         for request_rate, result in zip(args.request_rate, results):
-            data.append((request_rate, result.metric.ttft_slo_attainment, result.metric.tpot_slo_attainment, result.metric.slo_attainment))
+            data.append((
+                request_rate, 
+                result.metric.ttft_slo_attainment, 
+                result.metric.tpot_slo_attainment, 
+                result.metric.slo_attainment,
+                result.metric.request_throughput, 
+                result.metric.output_token_throughput, 
+                result.metric.mean_latency_ms,
+                result.metric.median_latency_ms, 
+                result.metric.p90_latency_ms, 
+                result.metric.p99_latency_ms, 
+                result.metric.mean_ttft_ms, 
+                result.metric.median_ttft_ms, 
+                result.metric.p90_ttft_ms, 
+                result.metric.p99_ttft_ms, 
+                result.metric.mean_tpot_ms, 
+                result.metric.median_tpot_ms, 
+                result.metric.p90_tpot_ms, 
+                result.metric.p99_tpot_ms, 
+                ))
         slo_table = tabulate(data, headers, tablefmt="plain")
         print(slo_table)
 
@@ -70,8 +102,10 @@ class OnlineRequestOutput:
     token_times: list[float] = field(default_factory=list)
 
 
-async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, pbar: tqdm, client: AsyncOpenAI) -> OnlineRequestOutput:
+async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, send_pbar: tqdm, recv_pbar: tqdm, client: AsyncOpenAI) -> OnlineRequestOutput:
+    send_pbar.update(1)
     output = OnlineRequestOutput(entry=entry)
+    output.start_time = time.perf_counter()
     response = await client.chat.completions.create(
         messages = [{
             "role":"user",
@@ -94,14 +128,12 @@ async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, pbar
         stream=True, 
     )
     output.success = True
-    output.start_time = time.perf_counter()
     async for chunk in response:
         context = chunk.choices[0].delta.content
         output.output_text += context
         output.token_times.append(time.perf_counter())
     output.prompt = entry.prompt
-    if pbar:
-        pbar.update(1)
+    recv_pbar.update(1)
     return output
 
 async def benchmark(args: argparse.Namespace, dataset: SyntheticDataset, client: AsyncOpenAI, request_rate: float) -> BenchmarkResult:
@@ -113,8 +145,7 @@ async def benchmark(args: argparse.Namespace, dataset: SyntheticDataset, client:
     metric_builder.start()
     tasks = []
     async for (i, entry) in poisson_process_request_generator(dataset=dataset, request_rate=request_rate):
-        tasks.append(asyncio.create_task(server_proxy(args, entry, pbar=recv_pbar, client=client)))
-        send_pbar.update(1)
+        tasks.append(asyncio.create_task(server_proxy(args, entry, send_pbar=send_pbar, recv_pbar=recv_pbar, client=client)))
     outputs: list[OnlineRequestOutput] = await asyncio.gather(*tasks)
 
     metric_builder.end()
@@ -199,18 +230,6 @@ if __name__ == '__main__':
         action='store_true',
         default=False,
         help='test correctness'
-    ) 
-    parser.add_argument(
-        '--test-performance',
-        action='store_true',
-        default=False,
-        help='test performance'
-    ) 
-    parser.add_argument(
-        '--slo-analysis',
-        action='store_true',
-        default=False,
-        help='test slo'
     ) 
     parser.add_argument("--tpot-slo", type=float, default=float(os.environ.get("TPOT_SLO", 0.16)))
     parser.add_argument("--ttft-slo", type=float, default=float(os.environ.get("TTFT_SLO", 2.0)))
