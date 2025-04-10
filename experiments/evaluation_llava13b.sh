@@ -3,16 +3,16 @@
 SCRIPT=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT")
 VLLM_ROOT_DIR=$(realpath "$SCRIPT_DIR/../")
-MODEL="Qwen/Qwen2.5-VL-32B-Instruct"
-MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/Qwen2.5-VL-32B-Instruct"
-REQUEST_RATES="4 20"
-NUM_REQUESTS=500
+MODEL="llava-hf/llava-1.5-13b-hf"
+MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/llava-1.5-13b-hf"
+REQUEST_RATES="2 3 4 5 6 7 8 9 10 11 12"
+NUM_REQUESTS=200
 SHARED_PARAMS="--enable-chunked-prefill --no-enable-prefix-caching --max-num-batched-tokens=1152 --tensor-parallel-size=4"
-export CUDA_VISIBLE_DEVICES=0,1,2,3
+export CUDA_VISIBLE_DEVICES=1,2,3,4
 export TEST=0
 export PRINT_LATENCY=1
 export DEBUG_SCHEDULE=1
-export TTFT_SLO=10.0
+export TTFT_SLO=1.0
 export TPOT_SLO=0.08
 
 RESULT_DIR=$(echo "$SCRIPT_DIR/$(date +%Y%m%d_%H%M%S)_TTFT_SLO${TTFT_SLO}_TPOT_SLO_${TPOT_SLO}_REQUEST_RATES_${REQUEST_RATES}_NUM_REQUESTS_${NUM_REQUESTS}_${SHARED_PARAMS}" | tr ' ' '_')
@@ -41,6 +41,7 @@ evaluate_vllm() {
     vllm serve $MODEL_PATH \
     --host=127.0.0.1 \
     --port=8888 \
+    --chat-template=$VLLM_ROOT_DIR/examples/template_llava.jinja \
     $SHARED_PARAMS \
     > $RESULT_DIR/baseline_api_server.log 2>&1 &
 
@@ -64,6 +65,8 @@ evaluate_vllm() {
         conda run -n vllm --no-capture-output \
         python benchmark.py --num-requests=$NUM_REQUESTS --model=$MODEL_PATH --port=8888 \
         --test-correctness \
+        --test-performance \
+        --slo-analysis \
         $scenario \
         --request-rate ${REQUEST_RATES} \
         > $RESULT_DIR/baseline_${scenario// /_}_result.log
@@ -82,6 +85,7 @@ evaluate_stage_level_schedule() {
     vllm serve $MODEL_PATH \
     --host=127.0.0.1 \
     --port=8888 \
+    --chat-template=$VLLM_ROOT_DIR/examples/template_llava.jinja \
     ${SHARED_PARAMS} \
     > $RESULT_DIR/stage_level_schedule_api_server.log 2>&1 &
 
@@ -105,6 +109,8 @@ evaluate_stage_level_schedule() {
         conda run -n vllm --no-capture-output \
         python benchmark.py --num-requests=$NUM_REQUESTS --model=$MODEL_PATH --port=8888 \
         --test-correctness \
+        --test-performance \
+        --slo-analysis \
         $scenario \
         --request-rate ${REQUEST_RATES} \
         > $RESULT_DIR/stage_level_schedule_${scenario// /_}_result.log
