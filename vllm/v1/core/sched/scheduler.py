@@ -496,6 +496,7 @@ class Scheduler(SchedulerInterface):
         if not request.has_encoder_inputs():
             return [], num_new_tokens, encoder_budget, token_budget, has_prefill, has_encode
 
+        prev_encoder_budget = encoder_budget
         encoder_inputs_to_schedule: list[int] = []
         mm_positions = request.mm_positions
         assert mm_positions is not None
@@ -544,6 +545,8 @@ class Scheduler(SchedulerInterface):
             if len(encoder_inputs_to_schedule) > 0: # encode stage
                 if has_prefill:
                     num_new_tokens = 0
+                    encoder_budget = prev_encoder_budget
+                    encoder_inputs_to_schedule = []
                 else:
                     num_new_tokens = 1
                     has_encode = True
