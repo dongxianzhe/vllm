@@ -11,8 +11,8 @@ SCRIPT=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT")
 VLLM_ROOT_DIR=$(realpath "$SCRIPT_DIR/../")
 MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/llava-v1.6-vicuna-7b-hf"
-REQUEST_RATES="4 5 6"
-NUM_REQUESTS=100
+REQUEST_RATES="1 2 3 4 5 6 7 8 9 10"
+NUM_REQUESTS=200
 RESULT_DIR=$(echo "$SCRIPT_DIR/$(date +%Y%m%d_%H%M%S)_${MODEL_PATH##*/}_REQUEST_RATES_${REQUEST_RATES}_NUM_REQUESTS_${NUM_REQUESTS}" | tr ' ' '_')
 SHARED_PARAMS="\
     --host=127.0.0.1 \
@@ -25,10 +25,10 @@ SHARED_PARAMS="\
 
 scenarios=(
     "--textcaps=1 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
-    # "--textcaps=0 --pope=1 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
-    # "--textcaps=0 --pope=0 --mme=1 --text_vqa=0 --vizwiz_vqa=0"
-    # "--textcaps=0 --pope=0 --mme=0 --text_vqa=1 --vizwiz_vqa=0"
-    # "--textcaps=0 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=1"
+    "--textcaps=0 --pope=1 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=1 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=0 --text_vqa=1 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=1"
 )
 
 methods=(
@@ -97,7 +97,7 @@ for scenario in "${scenarios[@]}"; do
 
     conda run -n vllm --no-capture-output \
         python find_best_slo.py --method-results-paths $method_results_paths \
-        > $RESULT_DIR/slo_attainment_analysis.log
+        > $RESULT_DIR/${scenario// /_}_slo_attainment_analysis.log
 done
 
 for method in "${methods[@]}"; do
