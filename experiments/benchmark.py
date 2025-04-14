@@ -155,14 +155,6 @@ if __name__ == '__main__':
     )
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8888)
-    parser.add_argument(
-        '--test-correctness',
-        action='store_true',
-        default=False,
-        help='test correctness'
-    ) 
-    parser.add_argument("--tpot-slo", type=float, default=float(os.environ.get("TPOT_SLO", 0.16)))
-    parser.add_argument("--ttft-slo", type=float, default=float(os.environ.get("TTFT_SLO", 2.0)))
     parser.add_argument("--textcaps", type=int, default=int(os.environ.get("TEXTCAPS", 0)))
     parser.add_argument("--pope", type=int, default=int(os.environ.get("POPE", 0)))
     parser.add_argument("--mme", type=int, default=int(os.environ.get("MME", 0)))

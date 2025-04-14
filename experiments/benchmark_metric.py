@@ -230,12 +230,8 @@ class BenchmarkMetricsAnalysisResult:
     methods_score: list[float] # each method score, the more the better, used to find a suitable slo settings
 
     def print(self):
-        print(f'TTFT_SLO: {self.ttft_slo}')
-        print(f'TPOT_SLO: {self.tpot_slo}')
-
-        headers = [
-            "Method", 
-            "Request_Rate(Req/s)", 
+        print(f'TTFT_SLO: {self.ttft_slo} TPOT_SLO: {self.tpot_slo} score: {self.methods_score}')
+        metrics_headers = [
             "TTFT_SLO_Attainment", 
             "TPOT_SLO_Attainment", 
             "SLO_Attainment", 
@@ -254,34 +250,53 @@ class BenchmarkMetricsAnalysisResult:
             "P90_TPOT(ms)", 
             "P99_TPOT(ms)", 
             ]
+        metric_fields = [
+            "ttft_slo_attainment", 
+            "tpot_slo_attainment", 
+            "slo_attainment",
+            "request_throughput", 
+            "output_token_throughput",
+            "mean_latency_ms", 
+            "median_latency_ms", 
+            "p90_latency_ms", 
+            "p99_latency_ms",
+            "mean_ttft_ms", 
+            "median_ttft_ms", 
+            "p90_ttft_ms", 
+            "p99_ttft_ms",
+            "mean_tpot_ms", 
+            "median_tpot_ms", 
+            "p90_tpot_ms", 
+            "p99_tpot_ms"
+        ]
 
-        data = []
-        for method_metrics, method_results in zip(self.methods_metrics, self.methods_results):
-            method_name: str = method_results.method_name
-            results_all_rate: list[BenchmarkResult] = method_results.results
-            metrics_all_rate: list[BenchmarkMetrics] = method_metrics
-            for metrics, results in zip(metrics_all_rate, results_all_rate):
-                data.append((
-                    method_name, 
-                    results.request_rate, 
-                    metrics.ttft_slo_attainment, 
-                    metrics.tpot_slo_attainment, 
-                    metrics.slo_attainment,
-                    metrics.request_throughput, 
-                    metrics.output_token_throughput, 
-                    metrics.mean_latency_ms,
-                    metrics.median_latency_ms, 
-                    metrics.p90_latency_ms, 
-                    metrics.p99_latency_ms, 
-                    metrics.mean_ttft_ms, 
-                    metrics.median_ttft_ms, 
-                    metrics.p90_ttft_ms, 
-                    metrics.p99_ttft_ms, 
-                    metrics.mean_tpot_ms, 
-                    metrics.median_tpot_ms, 
-                    metrics.p90_tpot_ms, 
-                    metrics.p99_tpot_ms, 
-                    ))
+        num_metrics = len(metrics_headers)
+        num_methods = len(self.methods_metrics)
+        num_request_rates = len(self.methods_results[0].results)
+
+        headers: list[str] = ["Request_Rate(Req/s)"]
+        data: list = []
+
+        for i in range(num_metrics):
+            for j in range(num_methods):
+                headers.append(metrics_headers[i])
+        
+        methods: list[str] = ["-"]
+        for i in range(num_metrics):
+            for j in range(num_methods):
+                methods.append(self.methods_results[j].method_name)
+        data.append(methods)
+
+        for i in range(num_request_rates):
+            row_data = []
+            request_rate = self.methods_results[0].results[i].request_rate
+            row_data.append(request_rate)
+            for field in metric_fields:
+                for j in range(num_methods):
+                    value = getattr(self.methods_metrics[j][i], field)
+                    row_data.append(value)
+            data.append(row_data)
+
         slo_table = tabulate(data, headers, tablefmt="plain")
         print(slo_table)
 
