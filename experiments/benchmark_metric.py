@@ -1,6 +1,33 @@
+from tabulate import tabulate
+import pickle
 import time
 import numpy as np
 from dataclasses import dataclass, field
+from typing import Union
+from synthetic_dataset import SyntheticDataset, SyntheticDataEntry
+
+
+@dataclass
+class OnlineRequestOutput:
+    entry: SyntheticDataEntry
+    success: bool = False
+    output_text: str = ""
+    start_time: float = 0.
+    token_times: list[float] = field(default_factory=list)
+
+
+@dataclass
+class BenchmarkResult:
+    request_rate: float = 0
+    start_time: float = 0
+    end_time: float = 0
+    outputs: list[OnlineRequestOutput] = field(default_factory=list)
+
+
+@dataclass
+class MethodResults:
+    method_name: str
+    results: list[BenchmarkResult] = field(default_factory=list)
 
 
 @dataclass
@@ -79,52 +106,85 @@ class BenchmarkMetrics:
         print("=" * 50)
     
 class BenchmarkMetricsBuilder:
-    def __init__(self):
+    def __init__(self, 
+        start_time: float, 
+        end_time  : float, 
+    ):
         self.total_requests: int = 0
         self.completed = 0
-        self.input_lens: list[int] = []
-        self.output_lens: list[int] = []
+        self.input_lens: list[int] = [] # num of prompt char
+        self.output_lens: list[int] = [] # num of output tokens
         self.latencies: list[float] = []
         self.ttfts: list[float] = []
         self.tpots: list[float] = []
-        self.start_time = time.perf_counter()
-        self.end_time = time.perf_counter()
-        self.ttft_slo_cnt: int = 0
-        self.tpot_slo_cnt: int = 0
-        self.slo_cnt: int = 0
+        self.start_time = start_time
+        self.end_time = end_time
+        self.ttft_slo = 0.
+        self.tpot_slo = 0.
+        self.ttft_slo_cnt: int = 0 # num of requests that satisfied ttft
+        self.tpot_slo_cnt: int = 0 # num of requests that satisfied tpot
+        self.slo_cnt: int = 0 # num of requests that satisfied both ttft and tpot
+        
+    def set_ttft_slo(self, ttft_slo: float):
+        # You can set the slo for different requests
+        self.ttft_slo = ttft_slo
 
-    def start(self):
-        self.start_time = time.perf_counter()
+    def set_tpot_slo(self, tpot_slo: float):
+        self.tpot_slo = tpot_slo
 
-    def end(self):
-        self.end_time = time.perf_counter()
-    
-    def append(self, input_len: int, success: bool, output_len: int, arrival_time: float, finished_time: float, token_times: list[float], ttft_slo: float, tpot_slo: float):
+    def _append(
+        self, 
+        input_len: int, # number of prompt char
+        success: bool, # wheather request is success
+        output_len: int, # number of output tokens
+        arrival_time: float, # request arrival time
+        finished_time: float, # request finished time
+        token_times: list[float] # request each token finish time
+    ):
+        assert self.ttft_slo > 0., 'set ttft_slo first and append request'
+        assert self.tpot_slo > 0., 'set tpot_slo first and append request'
         self.total_requests += 1
-        if success:
-            self.completed += 1
-            self.input_lens.append(input_len)
-            self.output_lens.append(output_len)
-            self.latencies.append(finished_time - arrival_time)
+        self.input_lens.append(input_len)
+        if not success:
+            return
 
-            is_ttft_satisfied: bool = True
-            is_tpot_satisfied: bool = True
-            tpot_above_slo_cnt: int = 0
-            for i in range(len(token_times)):
-                if i == 0:
-                    ttft = token_times[i] - arrival_time
-                    self.ttfts.append(ttft) 
-                    is_ttft_satisfied = ttft < ttft_slo
-                else:
-                    tpot = token_times[i] - token_times[i - 1]
-                    self.tpots.append(tpot)
-                    tpot_above_slo_cnt += tpot > tpot_slo
-                    is_tpot_satisfied = is_tpot_satisfied and tpot_above_slo_cnt <= 0
-            self.ttft_slo_cnt += is_ttft_satisfied
-            self.tpot_slo_cnt += is_tpot_satisfied
-            self.slo_cnt += is_ttft_satisfied and is_tpot_satisfied 
-        else:
-            self.input_lens.append(input_len)
+        self.completed += 1
+        self.output_lens.append(output_len)
+        self.latencies.append(finished_time - arrival_time)
+
+        is_ttft_satisfied: bool = True
+        is_tpot_satisfied: bool = True
+        tpot_above_slo_cnt: int = 0
+        for i in range(len(token_times)):
+            if i == 0:
+                ttft = token_times[i] - arrival_time
+                self.ttfts.append(ttft) 
+                is_ttft_satisfied = ttft < self.ttft_slo
+            else:
+                tpot = token_times[i] - token_times[i - 1]
+                self.tpots.append(tpot)
+                tpot_above_slo_cnt += tpot > self.tpot_slo
+                is_tpot_satisfied = is_tpot_satisfied and tpot_above_slo_cnt <= 0
+        self.ttft_slo_cnt += is_ttft_satisfied
+        self.tpot_slo_cnt += is_tpot_satisfied
+        self.slo_cnt += is_ttft_satisfied and is_tpot_satisfied 
+
+    def append(self, data: Union[OnlineRequestOutput, list[OnlineRequestOutput]]):
+        if isinstance(data, list):
+            for output in data:
+                self.append(output)
+            return
+        if isinstance(data, OnlineRequestOutput):
+            self._append(
+                input_len = len(data.entry.prompt),
+                success = data.success, 
+                output_len = len(data.token_times), 
+                arrival_time = data.start_time, 
+                finished_time = data.token_times[-1], 
+                token_times = data.token_times, 
+            )
+            return
+        raise Exception(f'invalid data dtype {type(data)}')
 
     def get_metrics(self) ->  BenchmarkMetrics:
         duration = self.end_time - self.start_time
@@ -159,3 +219,143 @@ class BenchmarkMetricsBuilder:
             slo_attainment = self.slo_cnt / self.total_requests, 
         )
         return metrics
+
+
+@dataclass
+class BenchmarkMetricsAnalysisResult:
+    ttft_slo: float
+    tpot_slo: float
+    methods_results: list[MethodResults] # each method result list, each result in list is coressponding to one request rate
+    methods_metrics: list[list[BenchmarkMetrics]] # each method result list, each metric in list is coressponding to one request rate
+    methods_score: list[float] # each method score, the more the better, used to find a suitable slo settings
+
+    def print(self):
+        print(f'TTFT_SLO: {self.ttft_slo}')
+        print(f'TPOT_SLO: {self.tpot_slo}')
+
+        headers = [
+            "Method", 
+            "Request_Rate(Req/s)", 
+            "TTFT_SLO_Attainment", 
+            "TPOT_SLO_Attainment", 
+            "SLO_Attainment", 
+            "Request_Throughput(Req/s)", 
+            "Token_Throughput(token/s)", 
+            "Avg_Latency(ms)", 
+            "Median_Latency(ms)", 
+            "P90_Latency(ms)", 
+            "P99_Latency(ms)", 
+            "Avg_TTFT(ms)", 
+            "Median_TTFT(ms)", 
+            "P90_TTFT(ms)", 
+            "P99_TTFT(ms)", 
+            "Avg_TPOT(ms)", 
+            "Median_TPOT(ms)", 
+            "P90_TPOT(ms)", 
+            "P99_TPOT(ms)", 
+            ]
+
+        data = []
+        for method_metrics, method_results in zip(self.methods_metrics, self.methods_results):
+            method_name: str = method_results.method_name
+            results_all_rate: list[BenchmarkResult] = method_results.results
+            metrics_all_rate: list[BenchmarkMetrics] = method_metrics
+            for metrics, results in zip(metrics_all_rate, results_all_rate):
+                data.append((
+                    method_name, 
+                    results.request_rate, 
+                    metrics.ttft_slo_attainment, 
+                    metrics.tpot_slo_attainment, 
+                    metrics.slo_attainment,
+                    metrics.request_throughput, 
+                    metrics.output_token_throughput, 
+                    metrics.mean_latency_ms,
+                    metrics.median_latency_ms, 
+                    metrics.p90_latency_ms, 
+                    metrics.p99_latency_ms, 
+                    metrics.mean_ttft_ms, 
+                    metrics.median_ttft_ms, 
+                    metrics.p90_ttft_ms, 
+                    metrics.p99_ttft_ms, 
+                    metrics.mean_tpot_ms, 
+                    metrics.median_tpot_ms, 
+                    metrics.p90_tpot_ms, 
+                    metrics.p99_tpot_ms, 
+                    ))
+        slo_table = tabulate(data, headers, tablefmt="plain")
+        print(slo_table)
+
+
+class BenchmarkMetricsAnalyzer:
+    def __init__(
+        self, 
+        tpot_slo: list[float], # analysis tpot slo
+        ttft_slo: list[float], # analysis ttft slo
+    ):
+        self.tpot_slo_list = tpot_slo
+        self.ttft_slo_list = ttft_slo
+        # how many request rate each baseline test, all baseline should have same number of request rates
+        self.num_request_rate: int = 0
+        self.methods_results: list[MethodResults] = []
+
+    def add_method(self, data: Union[str, MethodResults]):
+        # 1. read online request output
+        if isinstance(data, str):
+            path = data
+            with open(path, "rb") as f:
+                data: MethodResults = pickle.load(f)
+        self.methods_results.append(data)
+        if self.num_request_rate == 0:
+            self.num_request_rate = len(data.results)
+        else:
+            assert self.num_request_rate == len(data.results), 'all results should have same number of request rate'
+
+    def _analysis_slo_combination(self, ttft_slo: float, tpot_slo: float, method_results: MethodResults) -> list[BenchmarkMetrics]:
+        ret: list[BenchmarkMetrics] = []
+        for result_each_rate in method_results.results:
+            start_time = result_each_rate.start_time
+            end_time = result_each_rate.end_time
+            request_rate = result_each_rate.request_rate
+            outputs = result_each_rate.outputs
+            builder = BenchmarkMetricsBuilder(start_time=start_time, end_time=end_time)
+            builder.set_ttft_slo(ttft_slo)
+            builder.set_tpot_slo(tpot_slo)
+            builder.append(outputs)
+            metrics = builder.get_metrics()
+            ret.append(metrics)
+        return ret
+
+    def _compare_metric(self, metrics_list: list[BenchmarkMetrics]) -> float:
+        sum: float = 0
+        for metrics in metrics_list:
+            sum += metrics.slo_attainment
+        return sum / len(metrics_list)
+
+    def analysis(self) -> list[BenchmarkMetricsAnalysisResult]:
+        """
+        data: data path or list[BenchmarkResult]
+        """
+        analysis_results: list[BenchmarkMetricsAnalysisResult] = []
+        # 2. iterate ttft slo list
+        for ttft_slo in self.ttft_slo_list:
+            # 3. iterate tpot slo list
+            for tpot_slo in self.tpot_slo_list:
+                # 4. iterate baseline and our dataset
+                methods_metrics: list[list[BenchmarkMetrics]] = [] # first dim is methods, second dim is request rate
+                methods_score: list[float] = [] 
+                for method_results in self.methods_results:
+                    # 5. caculate metric
+                    metrics_list = self._analysis_slo_combination(ttft_slo, tpot_slo, method_results)
+                    methods_metrics.append(metrics_list)
+                    # 6. caculate metric score
+                    score = self._compare_metric(metrics_list)
+                    methods_score.append(score)
+                # 7. record score to metric map
+                analysis_results.append(BenchmarkMetricsAnalysisResult(
+                    ttft_slo = ttft_slo, 
+                    tpot_slo = tpot_slo, 
+                    methods_results = self.methods_results, 
+                    methods_metrics = methods_metrics, 
+                    methods_score = methods_score
+                ))
+        return analysis_results

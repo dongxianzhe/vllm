@@ -10,68 +10,19 @@ from openai import AsyncOpenAI
 from typing import AsyncGenerator
 from dataclasses import dataclass, field
 from transformers import AutoTokenizer
-from benchmark_metric import BenchmarkMetrics, BenchmarkMetricsBuilder
+from benchmark_metric import OnlineRequestOutput, BenchmarkResult, BenchmarkMetrics, BenchmarkMetricsBuilder, MethodResults
 from synthetic_dataset import SyntheticDataset, SyntheticDataEntry
 
 
-@dataclass
-class BenchmarkResult:
-    metric: BenchmarkMetrics
-    output_text: list[str] = field(default_factory=list)
-
-
-def log_result(args: argparse.Namespace, dataset: SyntheticDataset, results: list[BenchmarkResult]):
-    if args.test_correctness:
-        for i, result in enumerate(results):
-            print(f'==================== correctness test {i} ====================')
-            for i, output_text in enumerate(result.output_text):
-                print(f'{i}: {output_text}')
-
-        headers = [
-            "Request_Rate(Req/s)", 
-            "TTFT_SLO_Attainment", 
-            "TPOT_SLO_Attainment", 
-            "SLO_Attainment", 
-            "Request_Throughput(Req/s)", 
-            "Token_Throughput(token/s)", 
-            "Avg_Latency(ms)", 
-            "Median_Latency(ms)", 
-            "P90_Latency(ms)", 
-            "P99_Latency(ms)", 
-            "Avg_TTFT(ms)", 
-            "Median_TTFT(ms)", 
-            "P90_TTFT(ms)", 
-            "P99_TTFT(ms)", 
-            "Avg_TPOT(ms)", 
-            "Median_TPOT(ms)", 
-            "P90_TPOT(ms)", 
-            "P99_TPOT(ms)", 
-            ]
-        
-        data = []
-        for request_rate, result in zip(args.request_rate, results):
-            data.append((
-                request_rate, 
-                result.metric.ttft_slo_attainment, 
-                result.metric.tpot_slo_attainment, 
-                result.metric.slo_attainment,
-                result.metric.request_throughput, 
-                result.metric.output_token_throughput, 
-                result.metric.mean_latency_ms,
-                result.metric.median_latency_ms, 
-                result.metric.p90_latency_ms, 
-                result.metric.p99_latency_ms, 
-                result.metric.mean_ttft_ms, 
-                result.metric.median_ttft_ms, 
-                result.metric.p90_ttft_ms, 
-                result.metric.p99_ttft_ms, 
-                result.metric.mean_tpot_ms, 
-                result.metric.median_tpot_ms, 
-                result.metric.p90_tpot_ms, 
-                result.metric.p99_tpot_ms, 
-                ))
-        slo_table = tabulate(data, headers, tablefmt="plain")
-        print(slo_table)
+def log_result(args: argparse.Namespace, dataset: SyntheticDataset, method_results: MethodResults):
+    # we dont not log image to speed up log time
+    for result in method_results.results:
+        for output in result.outputs:
+            output.entry.image = None
+    
+    import pickle
+    with open(args.log_request_data_path, "wb") as f:
+        pickle.dump(method_results, f)
 
 
 async def poisson_process_request_generator(
@@ -90,16 +41,6 @@ def async_wrapper(func):
     def wrapper(*args, **kwargs):
         return asyncio.run(func(*args, **kwargs))
     return wrapper
-
-
-@dataclass
-class OnlineRequestOutput:
-    entry: SyntheticDataEntry
-    prompt: str = ""
-    success: bool = False
-    output_text: str = ""
-    start_time: float = 0.
-    token_times: list[float] = field(default_factory=list)
 
 
 async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, send_pbar: tqdm, recv_pbar: tqdm, client: AsyncOpenAI) -> OnlineRequestOutput:
@@ -139,37 +80,25 @@ async def server_proxy(args: argparse.Namespace, entry: SyntheticDataEntry, send
 async def benchmark(args: argparse.Namespace, dataset: SyntheticDataset, client: AsyncOpenAI, request_rate: float) -> BenchmarkResult:
     send_pbar = tqdm(total = len(dataset), desc='send')
     recv_pbar = tqdm(total = len(dataset), desc='recv')
-    metric_builder = BenchmarkMetricsBuilder()
-
-    start = time.perf_counter()
-    metric_builder.start()
+    start_time = time.perf_counter()
     tasks = []
     async for (i, entry) in poisson_process_request_generator(dataset=dataset, request_rate=request_rate):
         tasks.append(asyncio.create_task(server_proxy(args, entry, send_pbar=send_pbar, recv_pbar=recv_pbar, client=client)))
     outputs: list[OnlineRequestOutput] = await asyncio.gather(*tasks)
-
-    metric_builder.end()
+    end_time = time.perf_counter()
     recv_pbar.close()
     assert len(outputs) > 0
-    for output in outputs:
-        metric_builder.append(
-            input_len = len(output.entry.prompt), # todo
-            success = output.success, 
-            output_len = len(output.token_times), 
-            arrival_time = output.start_time, 
-            finished_time = output.token_times[-1], 
-            token_times = output.token_times, 
-            ttft_slo = output.entry.ttft_slo,
-            tpot_slo = output.entry.tpot_slo,
-        )
-        
+
     return BenchmarkResult(
-        metric = metric_builder.get_metrics(), 
-        output_text = [output.output_text for output in outputs]
+        start_time = start_time, 
+        end_time = end_time, 
+        request_rate = request_rate, 
+        outputs = outputs, 
     )
 
+
 @async_wrapper
-async def benchmarks(args: argparse.Namespace, dataset: SyntheticDataset) -> list[BenchmarkResult]:
+async def benchmarks(args: argparse.Namespace, dataset: SyntheticDataset) -> MethodResults:
     openai_api_key = "EMPTY"
     openai_api_base = f"http://{args.host}:{args.port}/v1"
     client = AsyncOpenAI(
@@ -181,7 +110,10 @@ async def benchmarks(args: argparse.Namespace, dataset: SyntheticDataset) -> lis
         print(f'start test request rate {request_rate}')
         result = await benchmark(args, dataset, client, request_rate)
         results.append(result)
-    return results
+    return MethodResults(
+        method_name = args.method_name, 
+        results = results, 
+    )
 
 
 def main(args: argparse.Namespace):
@@ -190,16 +122,14 @@ def main(args: argparse.Namespace):
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     dataset = SyntheticDataset(
         num_requests = args.num_requests, 
-        ttft_slo     = args.ttft_slo, 
-        tpot_slo     = args.tpot_slo, 
         textcaps     = args.textcaps, 
         pope         = args.pope, 
         mme          = args.mme, 
         text_vqa     = args.text_vqa, 
         vizwiz_vqa   = args.vizwiz_vqa, 
     )                 
-    results = benchmarks(args, dataset)
-    log_result(args, dataset, results)
+    method_results = benchmarks(args, dataset)
+    log_result(args, dataset, method_results)
 
 
 if __name__ == '__main__':
@@ -238,6 +168,8 @@ if __name__ == '__main__':
     parser.add_argument("--mme", type=int, default=int(os.environ.get("MME", 0)))
     parser.add_argument("--text_vqa", type=int, default=int(os.environ.get("TEXT_VQA", 0)))
     parser.add_argument("--vizwiz_vqa", type=int, default=int(os.environ.get("VIZWIZ_VQA", 0)))
+    parser.add_argument("--log-request-data-path", type=str, default="./method_results.pkl")
+    parser.add_argument("--method-name", type=str)
     args, remain_args = parser.parse_known_args()
     print(f'benchmark args {args}')
     main(args)

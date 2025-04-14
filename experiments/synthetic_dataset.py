@@ -21,15 +21,11 @@ def encode_base64_content_from_image(image: Image.Image) -> str:
 class SyntheticDataEntry:
     prompt: str
     image: str
-    ttft_slo: float
-    tpot_slo: float
 
 class SyntheticDataset:
     def __init__(
         self, 
         num_requests: int,
-        tpot_slo: float = 2., 
-        ttft_slo: float = 0.16, 
         textcaps: int = 1, 
         pope: int = 0, 
         mme: int = 0, 
@@ -91,8 +87,6 @@ class SyntheticDataset:
                 entry = SyntheticDataEntry(
                     prompt = data['question'], 
                     image = encode_base64_content_from_image(data['image']), 
-                    ttft_slo = 0,
-                    tpot_slo = 0, 
                 )
             else:
                 raise Exception('invalid dataset')
@@ -100,9 +94,6 @@ class SyntheticDataset:
 
         with ThreadPoolExecutor(max_workers=32) as executor:
             self.entries = list(executor.map(create_entry, tasks))
-        for entry in self.entries:
-            entry.tpot_slo = tpot_slo
-            entry.ttft_slo = ttft_slo
 
     def __len__(self):
         return self.num_requests
@@ -115,8 +106,6 @@ if __name__ == '__main__':
     start = time.perf_counter()
     dataset = SyntheticDataset(
         num_requests=100, 
-        tpot_slo = 2., 
-        ttft_slo = 0.16, 
         textcaps = 0, 
         pope = 1, 
         mme = 0, 
