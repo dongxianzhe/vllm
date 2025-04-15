@@ -7,8 +7,8 @@ export DEBUG_SCHEDULE=1
 SCRIPT=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "$SCRIPT")
 VLLM_ROOT_DIR=$(realpath "$SCRIPT_DIR/../")
-MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/llava-v1.6-vicuna-13b-hf"
-REQUEST_RATES="1 2 3 4 5 6 7 8 9 10"
+MODEL_PATH="/mnt/cfs/9n-das-admin/llm_models/llava-v1.6-34b-hf"
+REQUEST_RATES="0.5 1 1.5 2 2.5 3 3.5 4 4.5 5 5.5 6 6.5 7 7.5 8"
 NUM_REQUESTS=200
 RESULT_DIR=$(echo "$SCRIPT_DIR/$(date +%Y%m%d_%H%M%S)_${MODEL_PATH##*/}_REQUEST_RATES_${REQUEST_RATES}_NUM_REQUESTS_${NUM_REQUESTS}" | tr ' ' '_')
 

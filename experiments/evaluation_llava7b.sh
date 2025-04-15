@@ -19,7 +19,7 @@ RESULT_DIR=$(echo "$SCRIPT_DIR/$(date +%Y%m%d_%H%M%S)_TTFT_SLO${TTFT_SLO}_TPOT_S
 
  scenarios=(
     "--textcaps=1 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
-    # "--textcaps=0 --pope=1 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
+    "--textcaps=0 --pope=1 --mme=0 --text_vqa=0 --vizwiz_vqa=0"
     # "--textcaps=0 --pope=0 --mme=1 --text_vqa=0 --vizwiz_vqa=0"
     # "--textcaps=0 --pope=0 --mme=0 --text_vqa=1 --vizwiz_vqa=0"
     # "--textcaps=0 --pope=0 --mme=0 --text_vqa=0 --vizwiz_vqa=1"
