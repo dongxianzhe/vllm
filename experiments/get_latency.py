@@ -21,9 +21,9 @@ for name, pattern, data_list in latency_process_data:
 
 
 headers = [
-    "Step_Latency(ms)", 
-    "Encode_Latency(ms)", 
-    "Decode_Latency(ms)", 
+    "Step_Latency(s)", 
+    "Encode_Latency(s)", 
+    "Decode_Latency(s)", 
     ]
 data = []
 
